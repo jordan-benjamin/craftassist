@@ -109,6 +109,9 @@ if __name__ == "__main__":
         default=0.01,
         help="prob of taking gradients on empty locations",
     )
+
+    parser.add_argument("--num_words", default=1024, type=int, help="number of rows in embedding table")
+
     parser.add_argument("--ndonkeys", type=int, default=4, help="workers in dataloader")
     args = parser.parse_args()
 
@@ -141,7 +144,6 @@ if __name__ == "__main__":
     )
 
     args.num_classes = len(train_data.classes["idx2name"])
-    args.num_words = 256
     print("making model")
     args.load = False
     if args.load_model != "":
