@@ -5,6 +5,7 @@ Copyright (c) Facebook, Inc. and its affiliates.
 import os
 import argparse
 import sys
+from tqdm import tqdm
 from data_loaders import SemSegData
 import torch
 import torch.nn as nn
@@ -57,7 +58,7 @@ def validate(model, validation_data):
 def train_epoch(model, DL, loss, optimizer, args):
     model.train()
     losses = []
-    for b in DL:
+    for b in tqdm(DL):
         x = b[0]
         y = b[1]
         if args.cuda:
@@ -158,7 +159,7 @@ if __name__ == "__main__":
     optimizer = optim.Adagrad(model.parameters(), lr=args.lr)
 
     print("training")
-    for m in range(args.num_epochs):
+    for m in tqdm(range(args.num_epochs)):
         losses = train_epoch(model, rDL, nll, optimizer, args)
         print(" \nEpoch {} loss: {}".format(m, sum(losses) / len(losses)))
         if args.save_model != "":
