@@ -150,7 +150,12 @@ if __name__ == "__main__":
     data_dir = Path(args.data_dir)
 
     train_data = SemSegData(data_dir / "training_data.pkl", nexamples=args.debug, augment=aug)
-    valid_data = SemSegData(data_dir / "validation_data.pkl")
+    print("loaded train")
+    valid_data = SemSegData(
+        data_dir / "validation_data.pkl", 
+        classes_to_match=train_data.classes, 
+        )
+    print("loaded valid")
 
     shuffle = True
     if args.debug > 0:
