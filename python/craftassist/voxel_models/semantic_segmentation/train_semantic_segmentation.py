@@ -9,7 +9,7 @@ from tqdm import tqdm
 from data_loaders import SemSegData
 import torch
 import torch.nn as nn
-from torch.util.data import DataLoader
+from torch.utils.data import DataLoader
 import torch.optim as optim
 
 import semseg_models as models
