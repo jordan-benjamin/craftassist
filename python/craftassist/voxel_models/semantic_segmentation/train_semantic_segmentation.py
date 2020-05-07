@@ -9,8 +9,11 @@ from tqdm import tqdm
 from data_loaders import SemSegData
 import torch
 import torch.nn as nn
+from torch.util.data import DataLoader
 import torch.optim as optim
+
 import semseg_models as models
+from pathlib import Path
 
 
 ##################################################
@@ -51,9 +54,33 @@ def semseg_output(S, n, data):
 ##################################################
 
 
-def validate(model, validation_data):
-    pass
+def get_loss(x, y, yhat, loss):
+    # loss is expected to not reduce
+    preloss = loss(yhat, y)
+    mask = torch.zeros_like(y).float()
+    u = x.float() + x.float().uniform_(0, 1)
+    idx = u.view(-1).gt((1 - args.sample_empty_prob)).nonzero().squeeze()
+    mask.view(-1)[idx] = 1
+    M = float(idx.size(0))
+    # FIXME: eventually need to intersect with "none" tags; want to push loss on labeled empty voxels
+    preloss *= mask
+    l = preloss.sum() / M
+    return l
 
+
+def validate(model: nn.Module, validation_data: DataLoader, loss, args):
+    losses = []
+    model.eval()
+    with torch.no_grad():
+        for x, y in tqdm(validation_data):
+            if args.cuda:
+                x = x.cuda()
+                y = y.cuda()
+            yhat = model(x)
+            l = get_loss(x, y, yhat, loss)
+            losses.append(l.item())
+    return losses
+        
 
 def train_epoch(model, DL, loss, optimizer, args):
     model.train()
@@ -66,16 +93,7 @@ def train_epoch(model, DL, loss, optimizer, args):
             y = y.cuda()
         model.train()
         yhat = model(x)
-        # loss is expected to not reduce
-        preloss = loss(yhat, y)
-        mask = torch.zeros_like(y).float()
-        u = x.float() + x.float().uniform_(0, 1)
-        idx = u.view(-1).gt((1 - args.sample_empty_prob)).nonzero().squeeze()
-        mask.view(-1)[idx] = 1
-        M = float(idx.size(0))
-        # FIXME: eventually need to intersect with "none" tags; want to push loss on labeled empty voxels
-        preloss *= mask
-        l = preloss.sum() / M
+        l = get_loss(x, y, yhat, loss)
         losses.append(l.item())
         l.backward()
         optimizer.step()
@@ -128,21 +146,30 @@ if __name__ == "__main__":
         aug["flip_rotate"] = True
     if args.debug > 0 and len(aug) > 0:
         print("warning debug and augmentation together?")
-    train_data = SemSegData(args.data_dir + "training_data.pkl", nexamples=args.debug, augment=aug)
+    
+    data_dir = Path(args.data_dir)
+
+    train_data = SemSegData(data_dir / "training_data.pkl", nexamples=args.debug, augment=aug)
+    valid_data = SemSegData(data_dir / "validation_data.pkl")
 
     shuffle = True
     if args.debug > 0:
         shuffle = False
 
     print("making dataloader")
-    rDL = torch.utils.data.DataLoader(
-        train_data,
-        batch_size=args.batchsize,
-        shuffle=shuffle,
-        pin_memory=True,
-        drop_last=True,
-        num_workers=args.ndonkeys,
-    )
+    
+    def make_dataloader(ds):
+        return torch.utils.data.DataLoader(
+            ds,
+            batch_size=args.batchsize,
+            shuffle=shuffle,
+            pin_memory=True,
+            drop_last=True,
+            num_workers=args.ndonkeys,
+        )
+    
+    rDL = make_dataloader(train_data)
+    valid_dl = make_dataloader(valid_data)
 
     args.num_classes = len(train_data.classes["idx2name"])
     print("making model")
@@ -160,7 +187,11 @@ if __name__ == "__main__":
 
     print("training")
     for m in tqdm(range(args.num_epochs)):
-        losses = train_epoch(model, rDL, nll, optimizer, args)
-        print(" \nEpoch {} loss: {}".format(m, sum(losses) / len(losses)))
+        train_losses = train_epoch(model, rDL, nll, optimizer, args)
+        valid_losses = validate(model, valid_dl, nll, args)
+        print(f"\nEpoch {m}:")
+        print(f"Train loss: {sum(train_losses) / len(train_losses)}")
+        print(f"Valid loss: {sum(valid_losses) / len(valid_losses)}")
+
         if args.save_model != "":
             model.save(args.save_model)
