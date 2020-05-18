@@ -149,6 +149,9 @@ if __name__ == "__main__":
     parser.add_argument("--ndonkeys", type=int, default=4, help="workers in dataloader")
     args = parser.parse_args()
 
+    if args.save_model == "":
+        print("WARNING: No save path specified, model will not be saved.")
+
     this_dir = os.path.dirname(os.path.realpath(__file__))
     parent_dir = os.path.join(this_dir, "../")
     sys.path.append(parent_dir)
