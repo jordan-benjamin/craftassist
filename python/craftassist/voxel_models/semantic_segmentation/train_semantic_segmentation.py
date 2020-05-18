@@ -68,8 +68,17 @@ def get_loss(x, y, yhat, loss):
     return l
 
 
+def get_accuracy(y, yhat):
+    vals, pred = torch.max(yhat, 1)
+    correct_num = torch.sum(pred == y)
+    total_num = float(torch.numel(y))
+    acc = correct_num / total_num
+    return acc
+
+
 def validate(model: nn.Module, validation_data: DataLoader, loss, args):
     losses = []
+    accs = []
     model.eval()
     with torch.no_grad():
         for x, y in tqdm(validation_data):
@@ -78,13 +87,16 @@ def validate(model: nn.Module, validation_data: DataLoader, loss, args):
                 y = y.cuda()
             yhat = model(x)
             l = get_loss(x, y, yhat, loss)
+            a = get_accuracy(y, yhat)
+            accs.append(a.item())
             losses.append(l.item())
-    return losses
+    return losses, accs
         
 
 def train_epoch(model, DL, loss, optimizer, args):
     model.train()
     losses = []
+    accs = []
     for b in tqdm(DL):
         x = b[0]
         y = b[1]
@@ -93,11 +105,14 @@ def train_epoch(model, DL, loss, optimizer, args):
             y = y.cuda()
         model.train()
         yhat = model(x)
+
         l = get_loss(x, y, yhat, loss)
+        a = get_accuracy(y, yhat)
         losses.append(l.item())
+        accs.append(a.item())
         l.backward()
         optimizer.step()
-    return losses
+    return losses, accs
 
 
 if __name__ == "__main__":
@@ -192,11 +207,13 @@ if __name__ == "__main__":
 
     print("training")
     for m in tqdm(range(args.num_epochs)):
-        train_losses = train_epoch(model, rDL, nll, optimizer, args)
-        valid_losses = validate(model, valid_dl, nll, args)
+        train_losses, train_accs = train_epoch(model, rDL, nll, optimizer, args)
+        valid_losses, valid_accs = validate(model, valid_dl, nll, args)
         print(f"\nEpoch {m}:")
         print(f"Train loss: {sum(train_losses) / len(train_losses)}")
         print(f"Valid loss: {sum(valid_losses) / len(valid_losses)}")
+        print(f"Train acc: {sum(train_accs) / len(train_accs)}")
+        print(f"Valid acc: {sum(valid_accs) / len(valid_accs)}")
 
         if args.save_model != "":
             model.save(args.save_model)
